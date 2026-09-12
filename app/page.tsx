@@ -29,6 +29,8 @@ type GameState={room:{code:string;status:"lobby"|"playing"|"revealed";phase:numb
 
 const STORE="case_unknown_multiplayer";
 const POLL_INTERVAL_MS=2500;
+const REALTIME_FALLBACK_POLL_MS=30000;
+const REALTIME_ENABLED=process.env.NEXT_PUBLIC_REALTIME_ENABLED==="true";
 const REQUEST_TIMEOUT_MS=8000;
 const RULE_STEPS=[
   {n:"01",en:{title:"Join the same room",text:"One person creates a case and shares the link or five-character code. Up to ten people join from their own phones. Each phone may use English or Albanian."},sq:{title:"Hyni në të njëjtën dhomë",text:"Një person krijon çështjen dhe ndan lidhjen ose kodin pesëshkronjësh. Deri në dhjetë veta hyjnë nga telefonat e tyre. Çdo telefon mund të përdorë shqip ose anglisht."}},
@@ -162,10 +164,34 @@ function HomeContent(){
   useEffect(()=>{
     if(!session)return;
     sessionRef.current=session;void load(session,true);
+    let source:EventSource|null=null,reconnectTimer:number|undefined,stopped=false,retryDelay=1200;
     const resume=()=>{if(document.visibilityState==="visible"&&navigator.onLine)void load(session,true)};
-    const timer=window.setInterval(()=>{if(document.visibilityState==="visible"&&navigator.onLine)void load(session)},POLL_INTERVAL_MS);
+    const connectRealtime=async()=>{
+      if(!REALTIME_ENABLED||stopped||!navigator.onLine)return;
+      try{
+        const response=await fetch(`/api/realtime-ticket/${session.code}`,{headers:{"Accept":"application/json","x-player-token":session.token},credentials:"same-origin",cache:"no-store"});
+        const data=await readJson<{path:string;url?:string}>(response);
+        if(stopped)return;
+        source?.close();source=new EventSource(data.url??data.path,{withCredentials:true});
+        source.addEventListener("room_changed",()=>{retryDelay=1200;void load(session)});
+        source.addEventListener("ready",()=>{retryDelay=1200});
+        source.onerror=()=>{
+          source?.close();source=null;
+          if(stopped)return;
+          reconnectTimer=window.setTimeout(()=>{void connectRealtime()},retryDelay);
+          retryDelay=Math.min(10000,Math.round(retryDelay*1.7));
+        };
+      }catch{
+        if(stopped)return;
+        reconnectTimer=window.setTimeout(()=>{void connectRealtime()},retryDelay);
+        retryDelay=Math.min(10000,Math.round(retryDelay*1.7));
+      }
+    };
+    if(REALTIME_ENABLED)void connectRealtime();
+    const pollMs=REALTIME_ENABLED?REALTIME_FALLBACK_POLL_MS:POLL_INTERVAL_MS;
+    const timer=window.setInterval(()=>{if(document.visibilityState==="visible"&&navigator.onLine)void load(session)},pollMs);
     document.addEventListener("visibilitychange",resume);window.addEventListener("online",resume);window.addEventListener("pageshow",resume);
-    return()=>{window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);window.removeEventListener("online",resume);window.removeEventListener("pageshow",resume)};
+    return()=>{stopped=true;source?.close();if(reconnectTimer)window.clearTimeout(reconnectTimer);window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);window.removeEventListener("online",resume);window.removeEventListener("pageshow",resume)};
   },[session,load]);
   function connect(next:Session){sessionRef.current=next;consecutiveFailures.current=0;localStorage.setItem(STORE,JSON.stringify(next));setSession(next);setSyncing(true)}
   async function submit(event:FormEvent){event.preventDefault();if(!entryMode)return;setError("");setBusy(true);try{const url=mode==="create"?"/api/games":`/api/games/${joinCode}/join`,playerName=entryMode==="account"&&account?account.username:name;const data=await postJson<Session>(url,{name:playerName,asGuest:entryMode==="guest"},language,undefined,entryMode==="account"?accessToken:undefined);connect({code:data.code,token:data.token})}catch(e){setError(connectionMessage(e,false,language))}finally{setBusy(false)}}
@@ -216,10 +242,11 @@ function AccountAccess({viewer,saveProfile,authenticated,back}:{viewer:ViewerIde
     try{
       const supabase=getSupabaseBrowserClient();
       if(authMode==="signup"){
-        const{data, error:signupError}=await supabase.auth.signUp({email,password,options:{data:{username},emailRedirectTo:`${location.origin}/`}});
+        const callback=new URL("/auth/callback",location.origin);callback.searchParams.set("next","/");
+        const{data, error:signupError}=await supabase.auth.signUp({email,password,options:{data:{username},emailRedirectTo:callback.toString()}});
         if(signupError)throw signupError;
         if(data.session)await authenticated(data.session.access_token,username);
-        else{setNotice(t("Check your email to confirm your account, then return here to log in."));setPassword("");setConfirmation("")}
+        else{setNotice(t("Open the confirmation link in your email. It will return you to Hiddentify."));setPassword("");setConfirmation("")}
       }else{
         const{data,error:loginError}=await supabase.auth.signInWithPassword({email,password});
         if(loginError)throw loginError;
@@ -231,7 +258,8 @@ function AccountAccess({viewer,saveProfile,authenticated,back}:{viewer:ViewerIde
   async function continueWithGoogle(){
     setError("");setNotice("");setBusy(true);
     try{
-      const{error:oauthError}=await getSupabaseBrowserClient().auth.signInWithOAuth({provider:"google",options:{redirectTo:`${location.origin}/`}});
+      const callback=new URL("/auth/callback",location.origin);callback.searchParams.set("next","/");
+      const{error:oauthError}=await getSupabaseBrowserClient().auth.signInWithOAuth({provider:"google",options:{redirectTo:callback.toString()}});
       if(oauthError)throw oauthError;
     }catch(authError){setError(authError instanceof Error?authError.message:t("Google sign-in could not start."));setBusy(false)}
   }
@@ -268,7 +296,7 @@ function Landing({mode,setMode,openMode,name,setName,code,setCode,submit,busy,er
           <h1 className="max-w-[11ch] font-serif text-5xl leading-[.94] text-stone-100 sm:text-7xl">{t("Somebody in your group is")} <span className="text-red-400 italic">{t("lying.")}</span></h1>
           <p className="mt-6 max-w-xl text-lg leading-8 text-stone-300">{t("A fresh murder case for 3–10 friends. Every phone receives a character, secrets, and only part of the truth.")}</p>
           <div className="mt-7 flex flex-wrap gap-3"><Button onClick={()=>openMode("create")} className="blood-button new-case-font h-12 px-6"><Users/>{t("Start a new case")}</Button><Button variant="outline" onClick={()=>openMode("join")} className="join-hover h-12 border-white/35 bg-black/20 px-6 text-stone-100"><Search/>{t("Join a case")}</Button></div>
-          <div className="mt-7 flex flex-wrap gap-x-5 gap-y-3 text-sm text-stone-400"><span className="flex items-center gap-2"><Smartphone className="size-4 text-red-300"/>{t("No download")}</span><span className="flex items-center gap-2"><LockKeyhole className="size-4 text-red-300"/>{t("Private roles")}</span><span className="flex items-center gap-2"><Activity className="size-4 text-red-300"/>{t("Two game modes")}</span></div>
+          <div className="mt-7 flex flex-wrap gap-x-5 gap-y-3 text-sm text-stone-400"><span className="flex items-center gap-2"><Smartphone className="size-4 text-red-300"/>{t("Installable on your phone")}</span><span className="flex items-center gap-2"><LockKeyhole className="size-4 text-red-300"/>{t("Private roles")}</span><span className="flex items-center gap-2"><Activity className="size-4 text-red-300"/>{t("Two game modes")}</span></div>
         </div>
         <Card id="play" className="landing-card scroll-mt-24 border-white/15"><CardContent className="pt-6">
           <div className="mb-5 flex items-center justify-between gap-3"><div><p className="label mb-2">{t("Enter the investigation")}</p><h2 className="font-serif text-3xl">{t(entryMode===null?"Account or guest":entryMode==="account"&&!account?"Account access":mode==="create"?"Open a private room":"Use your invitation code")}</h2></div><LanguageToggle/></div>

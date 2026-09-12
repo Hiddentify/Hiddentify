@@ -1,6 +1,7 @@
 import { getRawDb } from "@/db";
 import { authenticate, cleanCode, noStoreHeaders, parseAccusation, type AbilityUseRow, type InterrogationMessageRow, type InterrogationRow, type PlayerActionRow, type PlayerRow } from "@/lib/game-server";
 import { gameLanguage, killerActionTypes, localizeMystery, maxKillerCount, resolvePlayerAction, resolveRoleAbility, votingPhase, type GameLanguage, type MysteryAbilityId, type MysteryCase, type PlayerActionType } from "@/lib/mystery";
+import { logServerError } from "@/lib/server-log";
 
 const actionLabels:Record<GameLanguage,Record<PlayerActionType,string>>={
   en:{search_scene:"Search the scene",analyze_evidence:"Analyze evidence",check_records:"Check records",interrogate:"Probe an alibi",plant_false_lead:"Plant a false trail",anonymous_tip:"Send an anonymous tip",forge_alibi:"Forge an alibi",delay_investigation:"Delay an investigation"},
@@ -65,7 +66,7 @@ export async function GET(request:Request,{params}:{params:Promise<{code:string}
       roundActions:{submitted:mode==="detective"?currentActions.length:0,total:mode==="detective"?rows.length:0},publicEvents,solution,allSubmitted:rows.length>=3&&rows.every(player=>Boolean(player.accusation)),
     },{headers:noStoreHeaders});
   }catch(error){
-    console.error(error);
+    logServerError("room_sync_failed",error,request);
     return Response.json({error:language==="sq"?"Dhoma nuk mund të sinkronizohej.":"The room could not be synchronized."},{status:500,headers:noStoreHeaders});
   }
 }

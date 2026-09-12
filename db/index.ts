@@ -12,7 +12,7 @@ function databaseUrl() {
   const value = process.env.DATABASE_URL?.trim();
   if (!value) {
     throw new Error(
-      "Game database is unavailable. Add the Supabase transaction-pooler DATABASE_URL in Netlify."
+      "Game database is unavailable. Add the Supabase transaction-pooler DATABASE_URL to the hosting environment."
     );
   }
   return value;
@@ -20,8 +20,12 @@ function databaseUrl() {
 
 function sqlClient() {
   if (!client) {
+    const configuredPool = Number(process.env.DATABASE_POOL_MAX ?? "5");
+    const maxConnections = Number.isFinite(configuredPool)
+      ? Math.max(1, Math.min(20, Math.trunc(configuredPool)))
+      : 5;
     client = postgres(databaseUrl(), {
-      max: 1,
+      max: maxConnections,
       prepare: false,
       connect_timeout: 10,
       idle_timeout: 20,

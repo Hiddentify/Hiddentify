@@ -17,12 +17,23 @@ function ResetPassword(){
     let active=true,unsubscribe=()=>{};
     try{
       const supabase=getSupabaseBrowserClient();
-      void supabase.auth.getSession().then(({data})=>{if(active)setReady(Boolean(data.session))});
+      const prepare=async()=>{
+        const code=new URLSearchParams(location.search).get("code");
+        if(code){
+          const{error}=await supabase.auth.exchangeCodeForSession(code);
+          if(error)throw error;
+          history.replaceState({},"",location.pathname);
+        }
+        const{data,error}=await supabase.auth.getSession();
+        if(error)throw error;
+        if(active)setReady(Boolean(data.session));
+      };
+      void prepare().catch(recoveryError=>{if(active){setError(recoveryError instanceof Error?recoveryError.message:t("This recovery link is missing or has expired. Request a new link from the login screen."));setReady(false)}});
       const listener=supabase.auth.onAuthStateChange((_event,session)=>{if(active)setReady(Boolean(session))});
       unsubscribe=()=>listener.data.subscription.unsubscribe();
     }catch{queueMicrotask(()=>{if(active)setReady(false)})}
     return()=>{active=false;unsubscribe()};
-  },[]);
+  },[t]);
   async function submit(event:FormEvent){
     event.preventDefault();setError("");
     if(password.length<8){setError(t("Use at least 8 characters for your password."));return}

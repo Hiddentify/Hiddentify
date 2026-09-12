@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: hiddentify-realtime
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.realtime
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: REALTIME_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://staging.hiddentify.space,https://hiddentify.space

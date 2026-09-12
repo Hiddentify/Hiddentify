@@ -2,6 +2,8 @@ import { getRawDb } from "@/db";
 import { resolvePlayerIdentity } from "@/lib/account-auth";
 import { cleanCode, hashToken, makeToken, noStoreHeaders } from "@/lib/game-server";
 import { gameLanguage } from "@/lib/mystery";
+import { notifyRoomChanged } from "@/lib/realtime-notify";
+import { databaseErrorMessage, isUniqueViolation, logServerError } from "@/lib/server-log";
 
 export async function POST(request:Request,{params}:{params:Promise<{code:string}>}){
   const sq=gameLanguage(request.headers.get("x-game-language"))==="sq";
@@ -15,6 +17,7 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
       if(existing){
         const token=makeToken(),tokenHash=await hashToken(token);
         await db.prepare("UPDATE players SET token_hash=?,name=? WHERE id=?").bind(tokenHash,name,existing.id).run();
+        await notifyRoomChanged(code);
         return Response.json({code,token},{headers:noStoreHeaders});
       }
     }
@@ -25,6 +28,14 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
     if(duplicate)return Response.json({error:sq?"Ky emër po përdoret tashmë në këtë dhomë.":"That name is already being used in this room."},{status:409,headers:noStoreHeaders});
     const playerId=crypto.randomUUID(),token=makeToken(),tokenHash=await hashToken(token);
     await db.prepare("INSERT INTO players (id,session_id,account_id,name,token_hash,is_host) VALUES (?,?,?,?,?,0)").bind(playerId,session.id,identity.accountId,name,tokenHash).run();
+    await notifyRoomChanged(code);
     return Response.json({code,token},{status:201,headers:noStoreHeaders});
-  }catch(error){console.error(error);return Response.json({error:sq?"Nuk mund të hyje në dhomë. Provo përsëri.":"The room could not be joined. Try again."},{status:500,headers:noStoreHeaders})}
+  }catch(error){
+    if(isUniqueViolation(error))return Response.json({error:sq?"Ky emër po përdoret tashmë në këtë dhomë.":"That name is already being used in this room."},{status:409,headers:noStoreHeaders});
+    const databaseError=databaseErrorMessage(error);
+    if(databaseError==="capacity")return Response.json({error:sq?"Kjo dhomë ka tashmë dhjetë lojtarë.":"This room already has ten players."},{status:409,headers:noStoreHeaders});
+    if(databaseError==="started")return Response.json({error:sq?"Kjo lojë ka nisur tashmë.":"This game has already started."},{status:409,headers:noStoreHeaders});
+    logServerError("room_join_failed",error,request);
+    return Response.json({error:sq?"Nuk mund të hyje në dhomë. Provo përsëri.":"The room could not be joined. Try again."},{status:500,headers:noStoreHeaders});
+  }
 }

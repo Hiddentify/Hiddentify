@@ -2,20 +2,22 @@
 
 Hiddentify is a mobile-first multiplayer murder-mystery game for 3–10 friends. This branch is portable outside ChatGPT and is prepared for:
 
-- Netlify deployment with standard Next.js
+- a free beta using Vercel + Render + Upstash
 - Supabase email/password and Google authentication
 - Supabase PostgreSQL game storage
+- Redis-backed realtime room updates
 - Guest play without registration
+- installation as a Progressive Web App on Android and iPhone
 
-For the complete owner setup, follow [`NETLIFY_SUPABASE_SETUP.md`](NETLIFY_SUPABASE_SETUP.md).
+For the staging-first setup, follow [`FREE_BETA_DEPLOYMENT.md`](FREE_BETA_DEPLOYMENT.md). The current Sites deployment remains untouched until the external staging version passes multiplayer tests.
 
 ## Independent local development
 
 1. Copy `.env.example` to `.env.local` and add a Supabase project URL, publishable key, and transaction-pooler `DATABASE_URL`.
 2. Run `supabase/schema.sql` once in the Supabase SQL Editor.
 3. Install packages with `npm install`.
-4. Run `npm run dev:netlify`.
-5. Build the Netlify version with `npm run build:netlify`.
+4. Run `npm run dev:netlify` (the script name is retained for compatibility; it starts standard Next.js).
+5. Build the portable version with `npm run build:node`.
 
 The older Sites/Vinext commands remain in the project only while the existing public deployment stays online during migration.
 

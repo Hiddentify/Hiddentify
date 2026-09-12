@@ -2,6 +2,8 @@ import { getRawDb } from "@/db";
 import { resolvePlayerIdentity } from "@/lib/account-auth";
 import { hashToken, makeToken, noStoreHeaders, uniqueCode } from "@/lib/game-server";
 import { gameLanguage } from "@/lib/mystery";
+import { notifyRoomChanged } from "@/lib/realtime-notify";
+import { logServerError } from "@/lib/server-log";
 
 export async function POST(request:Request){
   const sq=gameLanguage(request.headers.get("x-game-language"))==="sq";
@@ -13,6 +15,7 @@ export async function POST(request:Request){
       db.prepare("INSERT INTO game_sessions (id,code,status,phase,host_player_id) VALUES (?,?, 'lobby',0,?)").bind(sessionId,code,playerId),
       db.prepare("INSERT INTO players (id,session_id,account_id,name,token_hash,is_host) VALUES (?,?,?,?,?,1)").bind(playerId,sessionId,identity.accountId,name,tokenHash),
     ]);
+    await notifyRoomChanged(code);
     return Response.json({code,token},{status:201,headers:noStoreHeaders});
-  }catch(error){console.error(error);return Response.json({error:sq?"Dhoma nuk mund të krijohej. Provo përsëri.":"The room could not be created. Try again."},{status:500,headers:noStoreHeaders})}
+  }catch(error){logServerError("room_create_failed",error,request);return Response.json({error:sq?"Dhoma nuk mund të krijohej. Provo përsëri.":"The room could not be created. Try again."},{status:500,headers:noStoreHeaders})}
 }

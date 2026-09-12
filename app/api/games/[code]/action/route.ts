@@ -1,5 +1,7 @@
 import { getRawDb } from "@/db";
 import { authenticate, cleanCode, noStoreHeaders, type PlayerRow } from "@/lib/game-server";
+import { notifyRoomChanged } from "@/lib/realtime-notify";
+import { logServerError } from "@/lib/server-log";
 import { generateMystery, investigationActionTypes, killerActionTypes, maxKillerCount, randomRoleOrder, resolvePlayerAction, resolveRoleAbility, votingPhase, type MysteryAbilityId, type MysteryCase, type PlayerActionType } from "@/lib/mystery";
 
 const targetActions:PlayerActionType[]=["interrogate","plant_false_lead","anonymous_tip","forge_alibi","delay_investigation"];
@@ -20,7 +22,7 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
       if(auth.session.status!=="lobby")return Response.json({error:"The game mode cannot change after the case starts."},{status:409,headers:noStoreHeaders});
       if(body.gameMode!=="casual"&&body.gameMode!=="detective")return Response.json({error:"Choose Casual or Detective mode."},{status:400,headers:noStoreHeaders});
       await db.prepare("UPDATE game_sessions SET game_mode=? WHERE id=? AND status='lobby'").bind(body.gameMode,auth.session.id).run();
-      return Response.json({ok:true},{headers:noStoreHeaders});
+      await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     if(body.action==="set_killer_count"){
       if(!auth.player.is_host)return Response.json({error:"Only the host can choose the number of killers."},{status:403,headers:noStoreHeaders});
@@ -28,7 +30,7 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
       const countRow=await db.prepare("SELECT COUNT(*) AS total FROM players WHERE session_id=?").bind(auth.session.id).first<{total:number}>(),playerCount=Number(countRow?.total??0),killerCount=Number(body.killerCount);
       if(!Number.isInteger(killerCount)||killerCount<1||killerCount>maxKillerCount(playerCount))return Response.json({error:`Choose between 1 and ${maxKillerCount(playerCount)} killers for this lobby size.`},{status:400,headers:noStoreHeaders});
       await db.prepare("UPDATE game_sessions SET killer_count=? WHERE id=? AND status='lobby'").bind(killerCount,auth.session.id).run();
-      return Response.json({ok:true},{headers:noStoreHeaders});
+      await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     if(body.action==="start"){
       if(!auth.player.is_host)return Response.json({error:"Only the host can start the case."},{status:403,headers:noStoreHeaders});
@@ -38,12 +40,12 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
       if(auth.session.killer_count>maxKillerCount(players.length))return Response.json({error:"Choose fewer killers for this lobby size."},{status:409,headers:noStoreHeaders});
       const historyResult=await db.prepare("SELECT fingerprint,setting FROM case_history ORDER BY created_at DESC,id DESC LIMIT 60").all<{fingerprint:string;setting:string}>(),history=historyResult.results??[],recentFingerprints=history.map(row=>row.fingerprint),recentSettings=history.map(row=>row.setting);
       const mystery=generateMystery(players.length,auth.session.killer_count,recentFingerprints,recentSettings,auth.session.game_mode),roleOrder=randomRoleOrder(players.length),statements=[db.prepare("UPDATE game_sessions SET status='playing',phase=0,case_json=? WHERE id=? AND status='lobby'").bind(JSON.stringify(mystery),auth.session.id),db.prepare("INSERT INTO case_history (id,fingerprint,setting,method,twist) VALUES (?,?,?,?,?)").bind(crypto.randomUUID(),mystery.fingerprint??crypto.randomUUID(),mystery.setting,mystery.method,mystery.twist),...players.map((p,i)=>db.prepare("UPDATE players SET role_index=?,accusation=NULL WHERE id=?").bind(roleOrder[i],p.id))];
-      await db.batch(statements); return Response.json({ok:true},{headers:noStoreHeaders});
+      await db.batch(statements); await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     if(body.action==="advance"){
       if(!auth.player.is_host)return Response.json({error:"Only the host can release evidence."},{status:403,headers:noStoreHeaders});
       if(auth.session.status!=="playing")return Response.json({error:"The case is not active."},{status:409,headers:noStoreHeaders});
-      const next=Math.min(votingPhase(auth.session.game_mode),auth.session.phase+1);await db.prepare("UPDATE game_sessions SET phase=? WHERE id=?").bind(next,auth.session.id).run();return Response.json({ok:true},{headers:noStoreHeaders});
+      const next=Math.min(votingPhase(auth.session.game_mode),auth.session.phase+1);await db.prepare("UPDATE game_sessions SET phase=? WHERE id=?").bind(next,auth.session.id).run();await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     if(body.action==="ability"){
       if(auth.session.game_mode==="casual")return Response.json({error:"Role powers are available in Detective mode."},{status:409,headers:noStoreHeaders});
@@ -62,7 +64,7 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
       }
       const result=resolveRoleAbility(mystery,auth.player.role_index,auth.session.phase,ability.id,targetRoleIndex);
       await db.prepare("INSERT INTO ability_uses (id,session_id,player_id,ability_id,target_player_id,result) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(),auth.session.id,auth.player.id,ability.id,targetPlayerId,result).run();
-      return Response.json({ok:true},{headers:noStoreHeaders});
+      await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     if(body.action==="invite_interrogation"){
       if(auth.session.game_mode==="casual")return Response.json({error:"Private interrogations are available in Detective mode."},{status:409,headers:noStoreHeaders});
@@ -76,7 +78,7 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
       const busyChannel=await db.prepare(`SELECT id FROM interrogations WHERE session_id=? AND (initiator_player_id IN (?,?) OR invitee_player_id IN (?,?)) AND ((status='pending' AND invite_expires_at>?) OR (status='active' AND ends_at>?)) LIMIT 1`).bind(auth.session.id,auth.player.id,target.id,auth.player.id,target.id,nowIso,nowIso).first();
       if(busyChannel)return Response.json({error:"One of you is already handling another private interrogation."},{status:409,headers:noStoreHeaders});
       await db.prepare("INSERT INTO interrogations (id,session_id,initiator_player_id,invitee_player_id,status,invite_expires_at) VALUES (?,?,?,?, 'pending',?)").bind(crypto.randomUUID(),auth.session.id,auth.player.id,target.id,new Date(now.getTime()+INVITE_WINDOW_MS).toISOString()).run();
-      return Response.json({ok:true},{headers:noStoreHeaders});
+      await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     if(body.action==="respond_interrogation"){
       if(auth.session.game_mode==="casual")return Response.json({error:"Private interrogations are available in Detective mode."},{status:409,headers:noStoreHeaders});
@@ -91,7 +93,7 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
         const endsAt=new Date(Date.now()+INTERROGATION_MS).toISOString();
         await db.prepare("UPDATE interrogations SET status='active',ends_at=? WHERE id=? AND status='pending'").bind(endsAt,channel.id).run();
       }else await db.prepare("UPDATE interrogations SET status='declined' WHERE id=? AND status='pending'").bind(channel.id).run();
-      return Response.json({ok:true},{headers:noStoreHeaders});
+      await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     if(body.action==="send_interrogation_message"){
       if(auth.session.game_mode==="casual")return Response.json({error:"Private interrogations are available in Detective mode."},{status:409,headers:noStoreHeaders});
@@ -104,7 +106,7 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
       const count=await db.prepare("SELECT COUNT(*) AS total FROM interrogation_messages WHERE interrogation_id=?").bind(channel.id).first<{total:number}>();
       if(Number(count?.total??0)>=40)return Response.json({error:"This interrogation has reached its message limit."},{status:409,headers:noStoreHeaders});
       await db.prepare("INSERT INTO interrogation_messages (id,interrogation_id,sender_player_id,body) VALUES (?,?,?,?)").bind(crypto.randomUUID(),channel.id,auth.player.id,message).run();
-      return Response.json({ok:true},{headers:noStoreHeaders});
+      await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     if(body.action==="investigate"){
       if(auth.session.game_mode==="casual")return Response.json({error:"Private investigation actions are available in Detective mode."},{status:409,headers:noStoreHeaders});
@@ -124,7 +126,7 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
       }
       const resolution=resolvePlayerAction(mystery,auth.player.role_index,auth.session.phase,body.actionType,targetRoleIndex);
       await db.prepare("INSERT INTO player_actions (id,session_id,player_id,phase,action_type,target_player_id,result,public_effect) VALUES (?,?,?,?,?,?,?,?)").bind(crypto.randomUUID(),auth.session.id,auth.player.id,auth.session.phase,body.actionType,targetActions.includes(body.actionType)?body.targetPlayerId??null:null,resolution.result,resolution.publicEffect).run();
-      return Response.json({ok:true},{headers:noStoreHeaders});
+      await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     if(body.action==="accuse"){
       if(auth.session.status!=="playing"||auth.session.phase<votingPhase(auth.session.game_mode))return Response.json({error:"Accusations are not open yet."},{status:409,headers:noStoreHeaders});
@@ -133,15 +135,15 @@ export async function POST(request:Request,{params}:{params:Promise<{code:string
       if(targetPlayerIds.length!==requiredTargets)return Response.json({error:`Choose exactly ${requiredTargets} ${requiredTargets===1?"suspect":"suspects"}.`},{status:400,headers:noStoreHeaders});
       const playerResult=await db.prepare("SELECT id FROM players WHERE session_id=?").bind(auth.session.id).all<{id:string}>(),validIds=new Set((playerResult.results??[]).map(player=>player.id));
       if(!targetPlayerIds.every(id=>validIds.has(id)))return Response.json({error:"Choose only players from this room."},{status:400,headers:noStoreHeaders});
-      await db.prepare("UPDATE players SET accusation=? WHERE id=? AND accusation IS NULL").bind(JSON.stringify(targetPlayerIds),auth.player.id).run();return Response.json({ok:true},{headers:noStoreHeaders});
+      await db.prepare("UPDATE players SET accusation=? WHERE id=? AND accusation IS NULL").bind(JSON.stringify(targetPlayerIds),auth.player.id).run();await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     if(body.action==="reveal"){
       if(!auth.player.is_host)return Response.json({error:"Only the host can reveal the solution."},{status:403,headers:noStoreHeaders});
       if(auth.session.status!=="playing"||auth.session.phase<votingPhase(auth.session.game_mode))return Response.json({error:"Finish the investigation first."},{status:409,headers:noStoreHeaders});
       const voteRow=await db.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN accusation IS NOT NULL THEN 1 ELSE 0 END) AS submitted FROM players WHERE session_id=?").bind(auth.session.id).first<{total:number;submitted:number}>();
       if(Number(voteRow?.submitted??0)<Number(voteRow?.total??0))return Response.json({error:"Wait until every player has locked a vote."},{status:409,headers:noStoreHeaders});
-      await db.prepare("UPDATE game_sessions SET status='revealed' WHERE id=?").bind(auth.session.id).run();return Response.json({ok:true},{headers:noStoreHeaders});
+      await db.prepare("UPDATE game_sessions SET status='revealed' WHERE id=?").bind(auth.session.id).run();await notifyRoomChanged(code);return Response.json({ok:true},{headers:noStoreHeaders});
     }
     return Response.json({error:"Unknown game action."},{status:400,headers:noStoreHeaders});
-  }catch(error){console.error(error);return Response.json({error:"That action could not be completed."},{status:500,headers:noStoreHeaders})}
+  }catch(error){logServerError("game_action_failed",error,request);return Response.json({error:"That action could not be completed."},{status:500,headers:noStoreHeaders})}
 }

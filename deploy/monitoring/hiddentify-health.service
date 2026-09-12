@@ -1,0 +1,8 @@
+[Unit]
+Description=Check Hiddentify staging health and VPS capacity
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/hiddentify
+ExecStart=/opt/hiddentify/deploy/monitoring/check-hiddentify.sh
