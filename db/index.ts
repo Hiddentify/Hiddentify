@@ -9,10 +9,14 @@ type SqlExecutor = {
 let client: ReturnType<typeof postgres> | null = null;
 
 function databaseUrl() {
-  const value = process.env.DATABASE_URL?.trim();
+  const value = (
+    process.env.DATABASE_URL ??
+    process.env.POSTGRES_URL ??
+    process.env.POSTGRES_PRISMA_URL
+  )?.trim();
   if (!value) {
     throw new Error(
-      "Game database is unavailable. Add the Supabase transaction-pooler DATABASE_URL to the hosting environment."
+      "Game database is unavailable. Add DATABASE_URL or connect the Supabase Vercel integration."
     );
   }
   return value;
