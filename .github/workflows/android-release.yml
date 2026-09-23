@@ -22,11 +22,10 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android 36 build tools
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Accept Android SDK licenses and install build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build the installable Android APK
         working-directory: android
