@@ -1,23 +1,18 @@
-name: Build signed Android App Bundle
+name: Build downloadable Android APK
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  android-bundle:
+  android-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/hiddentify-upload.jks
-      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
     steps:
-      - name: Check out the tested source
+      - name: Check out the Android source
         uses: actions/checkout@v4
 
       - name: Set up Java 17
@@ -33,26 +28,33 @@ jobs:
       - name: Install Android 36 build tools
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Restore the private upload keystore
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          test -n "$ANDROID_KEYSTORE_BASE64"
-          test -n "$ANDROID_KEYSTORE_PASSWORD"
-          test -n "$ANDROID_KEY_ALIAS"
-          test -n "$ANDROID_KEY_PASSWORD"
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
-
-      - name: Build the signed Play Store bundle
+      - name: Build the installable Android APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon bundleRelease
+          ./gradlew --no-daemon assembleDebug
 
-      - name: Upload the signed AAB
+      - name: Prepare the direct-download file
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk Hiddentify.apk
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | grep "SHA256:"
+
+      - name: Keep a build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hiddentify-play-store-aab
-          path: android/app/build/outputs/bundle/release/app-release.aab
+          name: Hiddentify-Android-APK
+          path: Hiddentify.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
+
+      - name: Publish the direct-download release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view android-direct >/dev/null 2>&1; then
+            gh release upload android-direct Hiddentify.apk --clobber
+          else
+            gh release create android-direct Hiddentify.apk \
+              --title "Hiddentify for Android" \
+              --notes "Direct Android download for hiddentify.space."
+          fi
