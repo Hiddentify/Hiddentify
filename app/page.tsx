@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { choose, LanguageProvider, LanguageToggle, useLanguage, type Language } from "@/components/language";
+import { InstallAppButton } from "@/components/install-app-button";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { Activity, ArrowLeft, AtSign, BookOpen, Check, ChevronRight, Clipboard, Crown, ExternalLink, Eye, Fingerprint, FolderLock, FolderOpen, Link2, Loader2, LockKeyhole, LogIn, LogOut, Mail, MailOpen, MessageCircle, Radio, Search, Send, ShieldAlert, Smartphone, Target, Timer, UserRound, UserRoundPlus, Users, Zap } from "lucide-react";
 
@@ -297,7 +298,7 @@ function Landing({mode,setMode,openMode,name,setName,code,setCode,submit,busy,er
           <p className="mb-5 inline-flex rotate-[-1deg] bg-stone-100 px-3 py-1 text-sm font-semibold tracking-[.16em] text-stone-950">{t("CASE FILE · UNSOLVED")}</p>
           <h1 className="max-w-[11ch] font-serif text-5xl leading-[.94] text-stone-100 sm:text-7xl">{t("Somebody in your group is")} <span className="text-red-400 italic">{t("lying.")}</span></h1>
           <p className="mt-6 max-w-xl text-lg leading-8 text-stone-300">{t("A fresh murder case for 3–10 friends. Every phone receives a character, secrets, and only part of the truth.")}</p>
-          <div className="mt-7 flex flex-wrap gap-3"><Button onClick={()=>openMode("create")} className="blood-button new-case-font h-12 px-6"><Users/>{t("Start a new case")}</Button><Button variant="outline" onClick={()=>openMode("join")} className="join-hover h-12 border-white/35 bg-black/20 px-6 text-stone-100"><Search/>{t("Join a case")}</Button></div>
+          <div className="mt-7 flex flex-wrap gap-3"><Button onClick={()=>openMode("create")} className="blood-button new-case-font h-12 px-6"><Users/>{t("Start a new case")}</Button><Button variant="outline" onClick={()=>openMode("join")} className="join-hover h-12 border-white/35 bg-black/20 px-6 text-stone-100"><Search/>{t("Join a case")}</Button><InstallAppButton className="h-12 border-amber-100/40 bg-amber-100/10 px-6 text-amber-50 hover:border-amber-100/70 hover:bg-amber-100/20"/></div>
           <div className="mt-7 flex flex-wrap gap-x-5 gap-y-3 text-sm text-stone-400"><span className="flex items-center gap-2"><Smartphone className="size-4 text-red-300"/>{t("Installable on your phone")}</span><span className="flex items-center gap-2"><LockKeyhole className="size-4 text-red-300"/>{t("Private roles")}</span><span className="flex items-center gap-2"><Activity className="size-4 text-red-300"/>{t("Two game modes")}</span></div>
         </div>
         <Card id="play" className="landing-card scroll-mt-24 border-white/15"><CardContent className="pt-6">
