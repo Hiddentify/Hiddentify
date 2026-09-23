@@ -49,6 +49,21 @@ For a device-only check before Play Console submission, install the generated si
 bubblewrap install
 ```
 
+### Build the signed bundle with GitHub Actions
+
+The repository also includes the manual workflow **Build signed Android App Bundle**. Add these
+four repository secrets under **GitHub > Settings > Secrets and variables > Actions**:
+
+- `ANDROID_KEYSTORE_BASE64` — the upload keystore encoded as base64
+- `ANDROID_KEYSTORE_PASSWORD` — the upload keystore password
+- `ANDROID_KEY_ALIAS` — the alias inside the upload keystore
+- `ANDROID_KEY_PASSWORD` — the upload key password
+
+Then open **GitHub > Actions > Build signed Android App Bundle > Run workflow** on the tested
+release branch. When the job finishes, download the `hiddentify-play-store-aab` artifact and upload
+its `.aab` file to Play Console internal testing. GitHub keeps the generated artifact for 14 days.
+The workflow never commits the keystore or passwords.
+
 ## Connect the app and website
 
 1. Create the app in Google Play Console with package ID `space.hiddentify.app`.

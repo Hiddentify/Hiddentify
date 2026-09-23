@@ -50,6 +50,14 @@ def twaManifest = [
     orientation: 'portrait-primary',
 ]
 
+def releaseSigningEnvironment = [
+    'ANDROID_KEYSTORE_PATH',
+    'ANDROID_KEYSTORE_PASSWORD',
+    'ANDROID_KEY_ALIAS',
+    'ANDROID_KEY_PASSWORD',
+]
+def hasReleaseSigning = releaseSigningEnvironment.every { System.getenv(it) }
+
 android {
     compileSdkVersion 36
     namespace "space.hiddentify.app"
@@ -150,9 +158,22 @@ android {
 
         
     }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(System.getenv('ANDROID_KEYSTORE_PATH'))
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled true
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     compileOptions {
