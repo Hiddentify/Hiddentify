@@ -5,6 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Hiddentify",
     short_name: "Hiddentify",
     description: "A live social murder-mystery game for 3–10 friends.",
+    id: "/",
     start_url: "/",
     scope: "/",
     display: "standalone",

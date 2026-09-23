@@ -1,4 +1,4 @@
-const CACHE = "hiddentify-shell-v1";
+const CACHE = "hiddentify-shell-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/hiddentify-icon-192.png", "/hiddentify-icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -22,5 +22,5 @@ self.addEventListener("fetch", (event) => {
       void caches.open(CACHE).then((cache) => cache.put(request, copy));
     }
     return response;
-  }).catch(() => caches.match(request).then((cached) => cached || caches.match("/"))));
+  }).catch(() => caches.match(request).then((cached) => cached || (request.mode === "navigate" ? caches.match("/") : Response.error()))));
 });
