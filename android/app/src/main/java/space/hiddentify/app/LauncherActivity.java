@@ -25,11 +25,13 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class LauncherActivity extends Activity {
     private static final String HOME_URL = "https://hiddentify.space/";
@@ -44,14 +46,18 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        configureWindow();
-        buildInterface();
-        configureWebView();
+        try {
+            configureWindow();
+            buildInterface();
+            configureWebView();
 
-        String requestedUrl = getIntent() != null && getIntent().getData() != null
-                ? getIntent().getData().toString()
-                : HOME_URL;
-        webView.loadUrl(requestedUrl);
+            String requestedUrl = getIntent() != null && getIntent().getData() != null
+                    ? getIntent().getData().toString()
+                    : HOME_URL;
+            webView.loadUrl(requestedUrl);
+        } catch (Throwable startupError) {
+            showRecoveryScreen();
+        }
     }
 
     private void configureWindow() {
@@ -127,7 +133,9 @@ public class LauncherActivity extends Activity {
         intro.addView(tagline, taglineParams);
 
         introProgress = new ProgressBar(this);
-        introProgress.getIndeterminateDrawable().setTint(Color.rgb(173, 29, 45));
+        if (introProgress.getIndeterminateDrawable() != null) {
+            introProgress.getIndeterminateDrawable().setTint(Color.rgb(173, 29, 45));
+        }
         LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(dp(34), dp(34));
         progressParams.bottomMargin = dp(18);
         intro.addView(introProgress, progressParams);
@@ -182,9 +190,13 @@ public class LauncherActivity extends Activity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setUserAgentString(settings.getUserAgentString() + " HiddentifyAndroid/1.1");
 
-        CookieManager cookies = CookieManager.getInstance();
-        cookies.setAcceptCookie(true);
-        cookies.setAcceptThirdPartyCookies(webView, true);
+        try {
+            CookieManager cookies = CookieManager.getInstance();
+            cookies.setAcceptCookie(true);
+            cookies.setAcceptThirdPartyCookies(webView, true);
+        } catch (RuntimeException ignored) {
+            // The game can still run when an OEM WebView rejects cookie configuration.
+        }
 
         webView.setWebChromeClient(new WebChromeClient());
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -196,7 +208,7 @@ public class LauncherActivity extends Activity {
                 if (host != null && (host.equals("hiddentify.space") || host.endsWith(".hiddentify.space"))) {
                     return false;
                 }
-                startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                openExternal(uri);
                 return true;
             }
 
@@ -241,6 +253,91 @@ public class LauncherActivity extends Activity {
                 .start();
     }
 
+    private void showRecoveryScreen() {
+        webView = null;
+        LinearLayout recovery = new LinearLayout(this);
+        recovery.setOrientation(LinearLayout.VERTICAL);
+        recovery.setGravity(Gravity.CENTER);
+        recovery.setPadding(dp(28), dp(48), dp(28), dp(48));
+        recovery.setBackgroundColor(Color.rgb(13, 9, 11));
+
+        ImageView mark = new ImageView(this);
+        mark.setImageResource(R.mipmap.ic_launcher);
+        LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(88), dp(88));
+        markParams.bottomMargin = dp(22);
+        recovery.addView(mark, markParams);
+
+        TextView title = new TextView(this);
+        title.setText("HIDDENTIFY NEEDS A PHONE UPDATE");
+        title.setTextColor(Color.rgb(248, 237, 207));
+        title.setTextSize(22);
+        title.setGravity(Gravity.CENTER);
+        title.setTypeface(Typeface.SERIF, Typeface.BOLD);
+        recovery.addView(title);
+
+        TextView message = new TextView(this);
+        message.setText("Android's web component could not start. Update Android System WebView, restart the phone, then try again.");
+        message.setTextColor(Color.rgb(190, 181, 184));
+        message.setTextSize(15);
+        message.setGravity(Gravity.CENTER);
+        message.setLineSpacing(0, 1.25f);
+        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        messageParams.topMargin = dp(16);
+        messageParams.bottomMargin = dp(26);
+        recovery.addView(message, messageParams);
+
+        Button update = recoveryButton("UPDATE ANDROID SYSTEM WEBVIEW");
+        update.setOnClickListener(view -> openWebViewStore());
+        recovery.addView(update, buttonParams());
+
+        Button retry = recoveryButton("TRY AGAIN");
+        retry.setOnClickListener(view -> recreate());
+        recovery.addView(retry, buttonParams());
+
+        Button browser = recoveryButton("OPEN HIDDENTIFY.SPACE");
+        browser.setOnClickListener(view -> openExternal(Uri.parse(HOME_URL)));
+        recovery.addView(browser, buttonParams());
+
+        setContentView(recovery);
+    }
+
+    private Button recoveryButton(String label) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(13);
+        button.setAllCaps(false);
+        button.setBackgroundColor(Color.rgb(112, 10, 25));
+        return button;
+    }
+
+    private LinearLayout.LayoutParams buttonParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(50));
+        params.topMargin = dp(10);
+        return params;
+    }
+
+    private void openWebViewStore() {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("market://details?id=com.google.android.webview")));
+        } catch (RuntimeException noPlayStore) {
+            openExternal(Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.webview"));
+        }
+    }
+
+    private void openExternal(Uri uri) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, uri));
+        } catch (RuntimeException noBrowser) {
+            Toast.makeText(this, "No app is available to open this link.", Toast.LENGTH_LONG).show();
+        }
+    }
+
     @Override
     public void onBackPressed() {
         if (webView != null && webView.canGoBack()) {
@@ -254,7 +351,11 @@ public class LauncherActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
-        configureWindow();
+        try {
+            configureWindow();
+        } catch (RuntimeException ignored) {
+            // Fullscreen is optional; never let an OEM window bug close the game.
+        }
     }
 
     @Override
@@ -266,8 +367,12 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (webView != null) {
-            webView.loadUrl("about:blank");
-            webView.destroy();
+            try {
+                webView.loadUrl("about:blank");
+                webView.destroy();
+            } catch (RuntimeException ignored) {
+                // The WebView process may already be unavailable.
+            }
         }
         super.onDestroy();
     }
