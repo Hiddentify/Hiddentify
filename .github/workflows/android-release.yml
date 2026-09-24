@@ -36,8 +36,11 @@ jobs:
 
       - name: Prepare the direct-download file
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk Hiddentify.apk
-          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | grep "SHA256:"
+          APK_PATH="$(find android/app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -n "$APK_PATH"
+          cp "$APK_PATH" Hiddentify.apk
+          test -s Hiddentify.apk
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | grep "SHA256:" || true
 
       - name: Keep a build artifact
         uses: actions/upload-artifact@v4
