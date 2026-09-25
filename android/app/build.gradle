@@ -12,6 +12,7 @@ def hasReleaseSigning = releaseSigningEnvironment.every { System.getenv(it) }
 
 android {
     namespace "space.hiddentify.app"
+    buildFeatures { buildConfig true }
     compileSdkVersion 36
 
     buildFeatures {
