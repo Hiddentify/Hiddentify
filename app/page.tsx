@@ -35,11 +35,13 @@ const REALTIME_ENABLED=process.env.NEXT_PUBLIC_REALTIME_ENABLED==="true";
 const ACCOUNTS_ENABLED=process.env.NEXT_PUBLIC_ACCOUNTS_ENABLED==="true";
 const REQUEST_TIMEOUT_MS=8000;
 const RULE_STEPS=[
-  {n:"01",en:{title:"Join the same room",text:"One person creates a case and shares the link or five-character code. Up to ten people join from their own phones. Each phone may use English or Albanian."},sq:{title:"Hyni në të njëjtën dhomë",text:"Një person krijon çështjen dhe ndan lidhjen ose kodin pesëshkronjësh. Deri në dhjetë veta hyjnë nga telefonat e tyre. Çdo telefon mund të përdorë shqip ose anglisht."}},
-  {n:"02",en:{title:"Choose Casual or Detective",text:"Casual gives exactly three key evidence envelopes—one per round—with shorter roles and no private actions. Detective is the full game with four evidence packets, powers, and interrogations."},sq:{title:"Zgjidh E thjeshtë ose Detektiv",text:"Mënyra E thjeshtë jep saktësisht tri zarfe me prova kryesore—nga një për raund—me role më të shkurtra dhe pa veprime private. Detektiv është loja e plotë me katër pako provash, fuqi dhe marrje në pyetje."}},
-  {n:"03",en:{title:"Open your private folder",text:"Read your character, public story, alibi, secret, and objective. Do not show the screen. The killer or killers are chosen randomly; the host is not automatically guilty."},sq:{title:"Hap dosjen private",text:"Lexo personazhin, historinë publike, alibinë, sekretin dhe objektivin. Mos e trego ekranin. Vrasësi ose vrasësit zgjidhen rastësisht; drejtuesi nuk është automatikisht fajtor."}},
-  {n:"04",en:{title:"Open clues and talk",text:"The host releases evidence in rounds. Open every envelope, compare information aloud, question suspicious stories, and remember that innocent players also have reasons to lie."},sq:{title:"Hap provat dhe bisedo",text:"Drejtuesi publikon prova me raunde. Hap çdo zarf, krahasoni informacionin me zë, pyetni tregimet e dyshimta dhe mbani mend se edhe të pafajshmit kanë arsye të gënjejnë."}},
-  {n:"05",en:{title:"Name the full killer team",text:"Every player submits one complete secret ballot. Investigators win only if more than half of all ballots identify every killer exactly. Killer ballots count too."},sq:{title:"Emërto gjithë ekipin e vrasësve",text:"Çdo lojtar dërgon një votë sekrete të plotë. Hetuesit fitojnë vetëm nëse më shumë se gjysma e votave identifikojnë saktësisht çdo vrasës. Edhe votat e vrasësve numërohen."}},
+  {n:"01",en:{title:"Create or join a room",text:"One person creates a private case and shares its five-character code or invite link. Everyone else joins on their own phone, as a guest or with an email account."},sq:{title:"Krijo ose hyr në dhomë",text:"Një person krijon çështjen private dhe ndan kodin pesëshkronjësh ose lidhjen. Të tjerët hyjnë nga telefoni i tyre si vizitorë ose me llogari emaili."}},
+  {n:"02",en:{title:"Gather the players",text:"You need at least 3 players and can have up to 10. The host chooses Casual or Detective and how many killers there will be, then starts the case."},sq:{title:"Mblidh lojtarët",text:"Duhen të paktën 3 lojtarë dhe lejohen deri në 10. Drejtuesi zgjedh E thjeshtë ose Detektiv dhe numrin e vrasësve, pastaj nis çështjen."}},
+  {n:"03",en:{title:"Read your secret role",text:"Each phone gets a private character, alibi, secret, and objective. Killers are chosen randomly, and the host can be a killer. Do not show your private screen."},sq:{title:"Lexo rolin tënd sekret",text:"Çdo telefon merr një personazh, alibi, sekret dhe objektiv privat. Vrasësit zgjidhen rastësisht; edhe drejtuesi mund të jetë vrasës. Mos e trego ekranin."}},
+  {n:"04",en:{title:"Investigate the evidence",text:"The host opens evidence by round. Casual has three clear clues and no private actions. Detective has four evidence packets plus powers, investigations, and private interrogations."},sq:{title:"Heto provat",text:"Drejtuesi hap provat me raunde. E thjeshtë ka tri prova të qarta dhe pa veprime private. Detektiv ka katër pako provash, fuqi, hetime dhe marrje private në pyetje."}},
+  {n:"05",en:{title:"Discuss the case",text:"Talk with your friends, compare timelines and alibis, and decide which clues matter. Innocent players investigate; killers try to protect their story and accomplices."},sq:{title:"Diskuto çështjen",text:"Bisedoni, krahasoni kronologjinë dhe alibitë dhe vendosni cilat prova vlejnë. Të pafajshmit hetojnë; vrasësit mbrojnë historinë dhe bashkëpunëtorët."}},
+  {n:"06",en:{title:"Accuse and vote",text:"At the end, every player privately selects the complete killer team and submits one ballot. If there are multiple killers, naming only one is not enough. Killer votes count too."},sq:{title:"Akuzo dhe voto",text:"Në fund, çdo lojtar zgjedh privatisht gjithë ekipin e vrasësve dhe dërgon një votë. Nëse ka disa vrasës, emërimi i vetëm njërit nuk mjafton. Numërohen edhe votat e vrasësve."}},
+  {n:"07",en:{title:"Reveal the winner",text:"Investigators win only when more than half of all ballots name every killer exactly. Otherwise, including a tie or split vote, the killer team wins."},sq:{title:"Zbulo fituesin",text:"Hetuesit fitojnë vetëm kur më shumë se gjysma e të gjitha votave emërtojnë saktë çdo vrasës. Përndryshe, edhe në barazim ose vota të ndara, fitojnë vrasësit."}},
 ] as const;
 
 const MODE_DETAILS={
@@ -210,11 +212,68 @@ function HomeContent(){
   return <main className="min-h-screen"><Header game={game} leave={leave} openMode={openMode}/>{!session?<Landing mode={mode} setMode={setMode} openMode={openMode} name={name} setName={setName} code={joinCode} setCode={setJoinCode} submit={submit} busy={busy} error={error} account={account} viewer={viewer} entryMode={entryMode} chooseEntry={chooseEntry} changeEntry={()=>{setEntryMode(ACCOUNTS_ENABLED?null:"guest");setError("")}} saveProfile={saveProfile} authenticated={authenticated} signOut={signOut}/>:!game?<ErrorState error={error} retry={()=>load(session)} leave={leave}/>:game.room.status==="lobby"?<Lobby game={game} share={share} copied={copied} busy={busy} start={()=>act("start")} setKillerCount={killerCount=>act("set_killer_count",{killerCount})} setGameMode={gameMode=>act("set_game_mode",{gameMode})} error={error}/>:game.room.status==="playing"?<Playing game={game} busy={busy} error={error} advance={()=>act("advance")} investigate={(actionType,targetPlayerId)=>act("investigate",{targetPlayerId,actionType})} activateAbility={targetPlayerId=>act("ability",{targetPlayerId})} inviteInterrogation={targetPlayerId=>act("invite_interrogation",{targetPlayerId})} respondInterrogation={(interrogationId,accepted)=>act("respond_interrogation",{interrogationId,accepted})} sendInterrogationMessage={(interrogationId,message)=>act("send_interrogation_message",{interrogationId,message})} accuse={()=>guesses.length===game.room.killerCount&&act("accuse",{targetPlayerIds:guesses})} reveal={()=>act("reveal")} guesses={guesses} setGuesses={setGuesses}/>:<Solution game={game} leave={leave}/>}</main>
 }
 
-function Header({game,leave,openMode}:{game:GameState|null;leave:()=>void;openMode:(mode:"create"|"join")=>void}){const{t}=useLanguage();return <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0d090be8] px-3 py-3 backdrop-blur-md sm:px-4"><div className="mx-auto flex max-w-6xl items-center justify-between gap-2"><div className="flex items-center gap-2"><span className="blood-dot size-2 rounded-full"/><span className="brand-frijole">HIDDENTIFY</span></div>{game?<div className="flex items-center gap-1.5"><LanguageToggle compact/><HowToPlayDialog compact/><Badge className="hidden border-red-300/25 bg-red-950/40 px-3 py-1 font-mono text-red-100 sm:inline-flex">{game.room.code}</Badge><Button variant="ghost" size="icon" onClick={leave} aria-label={t("Leave room")}><LogOut/></Button></div>:<nav className="flex items-center gap-1.5 sm:gap-3" aria-label="Main navigation"><LanguageToggle compact/><HowToPlayDialog/><Button variant="outline" size="sm" onClick={()=>openMode("join")} className="join-hover hidden border-white/25 bg-transparent sm:inline-flex">{t("Join a case")}</Button><Button size="sm" onClick={()=>openMode("create")} className="blood-button new-case-font hidden md:inline-flex">{t("New case")}</Button></nav>}</div></header>}
+function Header({game,leave,openMode}:{game:GameState|null;leave:()=>void;openMode:(mode:"create"|"join")=>void}){
+  const{t}=useLanguage();
+  return <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0d090be8] px-3 py-3 backdrop-blur-md sm:px-4">
+    <div className="mx-auto flex max-w-6xl items-center justify-between gap-2">
+      <div className="flex items-center gap-2"><span className="blood-dot size-2 rounded-full"/><span className="brand-frijole">HIDDENTIFY</span></div>
+      <nav className="flex items-center gap-1.5 sm:gap-3" aria-label="Main navigation">
+        {game&&<Badge className="hidden border-red-300/25 bg-red-950/40 px-3 py-1 font-mono text-red-100 sm:inline-flex">{game.room.code}</Badge>}
+        {!game&&<><Button variant="outline" size="sm" onClick={()=>openMode("join")} className="join-hover hidden border-white/25 bg-transparent sm:inline-flex">{t("Join a case")}</Button><Button size="sm" onClick={()=>openMode("create")} className="blood-button new-case-font hidden md:inline-flex">{t("New case")}</Button></>}
+        <AppSettings inRoom={Boolean(game)} backToMenu={leave}/>
+      </nav>
+    </div>
+  </header>;
+}
+
+function AppSettings({inRoom,backToMenu}:{inRoom:boolean;backToMenu:()=>void}){
+  const{t}=useLanguage();
+  const[open,setOpen]=useState(false),[musicOn,setMusicOn]=useState(false);
+  const audioRef=useRef<HTMLAudioElement|null>(null);
+  useEffect(()=>{
+    const stored=localStorage.getItem("hiddentify_music")==="on";
+    setMusicOn(stored);
+    const resume=()=>{if(stored&&document.visibilityState==="visible")void audioRef.current?.play().catch(()=>{})};
+    document.addEventListener("pointerdown",resume,{once:true});
+    return()=>document.removeEventListener("pointerdown",resume);
+  },[]);
+  useEffect(()=>{
+    const visibility=()=>{if(document.visibilityState==="hidden")audioRef.current?.pause();else if(musicOn)void audioRef.current?.play().catch(()=>{})};
+    document.addEventListener("visibilitychange",visibility);
+    return()=>document.removeEventListener("visibilitychange",visibility);
+  },[musicOn]);
+  function toggleMusic(){
+    const next=!musicOn;
+    setMusicOn(next);
+    localStorage.setItem("hiddentify_music",next?"on":"off");
+    if(next)void audioRef.current?.play().catch(()=>{});
+    else audioRef.current?.pause();
+  }
+  function menu(){
+    setOpen(false);
+    if(inRoom)backToMenu();
+    window.scrollTo({top:0,behavior:"smooth"});
+  }
+  return <>
+    <audio ref={audioRef} src="/music/dystopia.mp3" loop preload="none"/>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild><Button variant="ghost" size="icon" aria-label={t("Settings")} title={t("Settings")} className="h-11 w-11 text-2xl">⚙️</Button></DialogTrigger>
+      <DialogContent className="max-w-sm border-white/15 bg-[#120d0f] text-stone-100">
+        <DialogHeader><DialogTitle className="font-serif text-2xl">{t("Settings")}</DialogTitle><DialogDescription>{t("Choose how you play.")}</DialogDescription></DialogHeader>
+        <div className="space-y-5 py-3">
+          <div className="flex items-center justify-between gap-3"><span>{t("Language")}</span><LanguageToggle/></div>
+          <div className="flex items-center justify-between gap-3"><span>{t("Background music")}</span><Button type="button" variant="outline" aria-pressed={musicOn} onClick={toggleMusic} className="min-w-20">{t(musicOn?"On":"Off")}</Button></div>
+          <HowToPlayDialog/>
+          <Button type="button" variant="outline" onClick={menu} className="h-11 w-full">{t("Back to menu")}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>;
+}
 
 function HowToPlayDialog({compact=false}:{compact?:boolean}){
   const{language,t}=useLanguage();
-  const icons=[Users,FolderLock,Mail,MessageCircle,Check];
+  const icons=[Users,Users,FolderLock,Mail,MessageCircle,Target,Check];
   return <Dialog>
     <DialogTrigger asChild><Button variant="outline" size="sm" className={`rules-trigger ${compact?"is-compact":""}`} aria-label={t("How to play")}><BookOpen/><span className={compact?"hidden md:inline":"inline"}>{t("How to play")}</span></Button></DialogTrigger>
     <DialogContent className="rules-dialog" showCloseButton>
@@ -223,7 +282,7 @@ function HowToPlayDialog({compact=false}:{compact?:boolean}){
         <div className="rules-meta"><Badge>{t("3–10 players")}</Badge><Badge>{t("1–4 killers")}</Badge><Badge>{t("One phone each")}</Badge><Badge>{t("2 ways to play")}</Badge></div>
       </div>
       <div className="rules-body">
-        <div className="rules-step-grid">{RULE_STEPS.map((step,index)=>{const Icon=icons[index]??BookOpen,copy=step[language];return <article key={step.n} className={`rules-step ${index===4?"is-final":""}`}><div className="rules-step-head"><span>{step.n}</span><span className="rules-icon"><Icon/></span></div><h3>{copy.title}</h3><p>{copy.text}</p></article>})}</div>
+        <div className="rules-step-grid">{RULE_STEPS.map((step,index)=>{const Icon=icons[index]??BookOpen,copy=step[language];return <article key={step.n} className={`rules-step ${index===RULE_STEPS.length-1?"is-final":""}`}><div className="rules-step-head"><span>{step.n}</span><span className="rules-icon"><Icon/></span></div><h3>{copy.title}</h3><p>{copy.text}</p></article>})}</div>
         <div className="rules-share-grid"><div><Eye/><p><strong>{t("Safe to say aloud")}</strong>{t("Your character’s name, job, public background, and any clue you choose to share.")}</p></div><div><LockKeyhole/><p><strong>{t("Keep on your phone")}</strong>{t("Your secret, objective, true movements, power result, and private messages—unless revealing one helps your strategy.")}</p></div></div>
         <div className="rules-majority"><ShieldAlert/><div><strong>{t("The rule that decides the winner")}</strong><p>{t("Each ballot must identify the full hidden team. More than half of all ballots must match every killer exactly. The killers’ ballots count too; a tied, split, or partly correct result means the killer team wins.")}</p></div></div>
         <DialogFooter className="mt-5"><DialogClose asChild><Button className="blood-button h-11 px-6"><Check/>{t("Got it—open the case")}</Button></DialogClose></DialogFooter>

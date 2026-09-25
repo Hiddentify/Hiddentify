@@ -6,6 +6,12 @@ export type Language="en"|"sq";
 const LANGUAGE_STORE="hiddentify_language";
 
 const sq:Record<string,string>={
+  "Settings":"Cilësimet",
+  "Choose how you play.":"Zgjidh si të luash.",
+  "Background music":"Muzika në sfond",
+  "On":"Ndezur",
+  "Off":"Fikur",
+  "Back to menu":"Kthehu te menuja",
   "Language":"Gjuha",
   "English":"Anglisht",
   "Albanian":"Shqip",
