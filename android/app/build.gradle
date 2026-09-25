@@ -14,6 +14,10 @@ android {
     namespace "space.hiddentify.app"
     compileSdkVersion 36
 
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId "space.hiddentify.app"
         minSdkVersion 23
