@@ -228,12 +228,13 @@ function Header({game,leave,openMode}:{game:GameState|null;leave:()=>void;openMo
 
 function AppSettings({inRoom,backToMenu}:{inRoom:boolean;backToMenu:()=>void}){
   const{t}=useLanguage();
-  const[open,setOpen]=useState(false),[musicOn,setMusicOn]=useState(false);
+  const[open,setOpen]=useState(false),[musicOn,setMusicOn]=useState(true);
   const audioRef=useRef<HTMLAudioElement|null>(null);
   useEffect(()=>{
-    const stored=localStorage.getItem("hiddentify_music")==="on";
+    const stored=localStorage.getItem("hiddentify_music")!=="off";
     setMusicOn(stored);
     const resume=()=>{if(stored&&document.visibilityState==="visible")void audioRef.current?.play().catch(()=>{})};
+    resume();
     document.addEventListener("pointerdown",resume,{once:true});
     return()=>document.removeEventListener("pointerdown",resume);
   },[]);
