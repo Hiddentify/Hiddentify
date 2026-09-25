@@ -18,8 +18,8 @@ android {
         applicationId "space.hiddentify.app"
         minSdkVersion 23
         targetSdkVersion 36
-        versionCode 4
-        versionName "1.1.2"
+        versionCode 5
+        versionName "1.1.3"
     }
 
     signingConfigs {
@@ -50,10 +50,4 @@ android {
     lintOptions {
         checkReleaseBuilds false
     }
-}
-
-dependencies {
-    // Kept temporarily so the legacy, now-unused TWA helper classes still compile.
-    // The launcher itself is the native fullscreen WebView activity.
-    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.6.2'
 }
