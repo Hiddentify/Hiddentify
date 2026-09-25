@@ -36,10 +36,10 @@ public final class LauncherActivity extends Activity {
         super.onCreate(state);
         Log.i(TAG, "Starting version " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")");
         try {
-            fullscreen();
             root = new FrameLayout(this);
             root.setBackgroundColor(Color.rgb(13, 9, 11));
             setContentView(root);
+            try { fullscreen(); } catch (RuntimeException error) { Log.w(TAG, "Fullscreen unavailable during launch", error); }
             createWebView();
             webView.loadUrl(internalUrl(getIntent()));
         } catch (Throwable error) {
