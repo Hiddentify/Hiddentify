@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PACKAGE=space.hiddentify.app
-APK=android/app/build/outputs/apk/debug/app-debug.apk
+APK=${ANDROID_TEST_APK:-android/app/build/outputs/apk/debug/app-debug.apk}
 adb install -r "$APK"
 adb logcat -c
 adb shell am start -W -n "$PACKAGE/.LauncherActivity"
