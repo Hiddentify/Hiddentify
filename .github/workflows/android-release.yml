@@ -40,6 +40,33 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
 
+      - name: Configure persistent release signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$KEYSTORE_B64" && -z "$KEYSTORE_PASSWORD" && -z "$KEY_ALIAS" && -z "$KEY_PASSWORD" ]]; then
+            echo "Signing secrets are not configured. The existing direct release will remain unchanged."
+            exit 0
+          fi
+          test -n "$KEYSTORE_B64" && test -n "$KEYSTORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/hiddentify-release.jks"
+          chmod 600 "$RUNNER_TEMP/hiddentify-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/hiddentify-release.jks" >> "$GITHUB_ENV"
+          echo "ANDROID_RELEASE_SIGNED=true" >> "$GITHUB_ENV"
+          echo "ANDROID_TEST_APK=android/app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_ENV"
+
+      - name: Build APK with the persistent release key
+        if: env.ANDROID_RELEASE_SIGNED == 'true'
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+
       - name: Launch APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -49,7 +76,12 @@ jobs:
 
       - name: Verify APK identity and prepare downloads
         run: |
-          APK_PATH=android/app/build/outputs/apk/debug/app-debug.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk Hiddentify-debug-1.1.3.apk
+          if [[ "${ANDROID_RELEASE_SIGNED:-}" != true ]]; then
+            echo "Release signing unavailable; no public APK was replaced."
+            exit 0
+          fi
+          APK_PATH=android/app/build/outputs/apk/release/app-release.apk
           test -s "$APK_PATH"
           BADGING="$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK_PATH")"
           echo "$BADGING" | grep -F "package: name='space.hiddentify.app' versionCode='5' versionName='1.1.3'"
@@ -64,21 +96,23 @@ jobs:
         with:
           name: Hiddentify-Android-APK
           path: |
+            Hiddentify-debug-1.1.3.apk
             Hiddentify-1.1.3.apk
             Hiddentify.apk
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
 
       - name: Publish the direct-download release
+        if: env.ANDROID_RELEASE_SIGNED == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view android-direct >/dev/null 2>&1; then
             gh release upload android-direct Hiddentify-1.1.3.apk Hiddentify.apk --clobber
-            gh release edit android-direct --target "$GITHUB_SHA" --notes "Android 1.1.3 built from $GITHUB_SHA. Emulator startup and homepage load passed. This APK is debug signed; uninstall any previous build if Android rejects the update."
+            gh release edit android-direct --target "$GITHUB_SHA" --notes "Android 1.1.3 built from $GITHUB_SHA and signed with the persistent release key. Emulator launch passed. A one-time uninstall is required when replacing an older debug-signed APK."
           else
             gh release create android-direct Hiddentify-1.1.3.apk Hiddentify.apk \
               --title "Hiddentify for Android" \
               --target "$GITHUB_SHA" \
-              --notes "Android 1.1.3 built from $GITHUB_SHA. Emulator startup and homepage load passed. This APK is debug signed; uninstall any previous build if Android rejects the update."
+              --notes "Android 1.1.3 built from $GITHUB_SHA and signed with the persistent release key. Emulator launch passed. A one-time uninstall is required when replacing an older debug-signed APK."
           fi
