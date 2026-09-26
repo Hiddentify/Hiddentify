@@ -6,13 +6,11 @@ def releaseSigningEnvironment = [
     'ANDROID_KEYSTORE_PATH',
     'ANDROID_KEYSTORE_PASSWORD',
     'ANDROID_KEY_ALIAS',
-    'ANDROID_KEY_PASSWORD',
 ]
 def hasReleaseSigning = releaseSigningEnvironment.every { System.getenv(it) }
 
 android {
     namespace "space.hiddentify.app"
-    buildFeatures { buildConfig true }
     compileSdkVersion 36
 
     buildFeatures {
@@ -33,7 +31,8 @@ android {
                 storeFile file(System.getenv('ANDROID_KEYSTORE_PATH'))
                 storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
                 keyAlias System.getenv('ANDROID_KEY_ALIAS')
-                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+                // Our PKCS12 key uses the store password for its private key.
+                keyPassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
             }
         }
     }
